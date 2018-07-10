@@ -441,6 +441,8 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
         logging.info('sampling surface with frzout')
 
+        partsList=np.array([])
+
         # sample particles and write to file
         with open('particles_in.dat', 'w') as f:
             for nsamples in range(1, maxsamples + 1):
@@ -448,6 +450,10 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
                 if parts.size == 0:
                     continue
                 nparts += parts.size
+                if len(partsList) == 0:
+                    partsList=parts
+                else:
+                    partsList=np.append(partsList,parts)
                 print('#', parts.size, file=f)
                 for p in parts:
                     print(p['ID'], *p['x'], *p['p'], file=f)
@@ -465,24 +471,46 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
         results['nsamples'] = nsamples
 
-        # hadronic afterburner
-        run_cmd('afterburner particles_in.dat particles_out.dat')
+#        # hadronic afterburner
+#        run_cmd('afterburner particles_in.dat particles_out.dat')
+#
+#        # read final particle data
+#        with open('particles_out.dat', 'rb') as f:
+#
+#            # partition UrQMD file into oversamples
+#            groups = groupby(f, key=lambda l: l.startswith(b'#'))
+#            samples = filter(lambda g: not g[0], groups)
+#
+#            # iterate over particles and oversamples
+#            parts_iter = (
+#                tuple((nsample, *l.split()))
+#                for nsample, (header, sample) in enumerate(samples, start=1)
+#                for l in sample
+#            )
+#
+#            parts = np.fromiter(parts_iter, dtype=parts_dtype)
 
-        # read final particle data
-        with open('particles_out.dat', 'rb') as f:
+        def get_charge(pid):
 
-            # partition UrQMD file into oversamples
-            groups = groupby(f, key=lambda l: l.startswith(b'#'))
-            samples = filter(lambda g: not g[0], groups)
+            charge=int(float(frzout.species_dict[abs(pid)]['charge']))
 
-            # iterate over particles and oversamples
-            parts_iter = (
-                tuple((nsample, *l.split()))
-                for nsample, (header, sample) in enumerate(samples, start=1)
-                for l in sample
-            )
+            if (pid < 0):
+                charge*=-1
 
-            parts = np.fromiter(parts_iter, dtype=parts_dtype)
+            return charge
+
+        parts=np.fromiter([(pid,get_charge(pid),math.sqrt(mom[1]**2+mom[2]**2),math.sqrt(mom[0]**2-mom[3]**2),0.0,math.atan2(mom[2],mom[1]),0.5*math.log((mom[0]+mom[3])/(mom[0]-mom[3])),math.atanh(mom[3]/math.sqrt(mom[1]**2+mom[2]**2+mom[3]**2))) for pid,pos,mom in partsList ],
+                dtype=[
+                    ('ID', int),
+                    ('charge', int),
+                    ('pT', float),
+                    ('ET', float),
+                    ('mT', float),
+                    ('phi', float),
+                    ('y', float),
+                    ('eta', float),
+                ]
+                )
 
         # save raw particle data (optional)
         if particles_file is not None:
