@@ -441,24 +441,119 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
         logging.info('sampling surface with frzout')
 
-        partsList=np.array([])
+        def compute_observables(partsList,results,init=False,final_nsamples=0):
 
+            def get_charge(pid):
+
+                charge=int(float(frzout.species_dict[abs(pid)]['charge']))
+
+                if (pid < 0):
+                    charge*=-1
+
+                return charge
+
+
+            if (init):
+                results['dNch_deta']=0
+                results['dET_deta']=0
+                for name, i in species:
+                    results['dN_dy'][name]=0
+                    results['mean_pT'][name] =0
+                results['pT_fluct']['N'] = 0
+                results['pT_fluct']['sum_pT'] = 0
+                results['pT_fluct']['sum_pTsq'] = 0
+                results['flow']['N'] = 0
+                results['flow']['Qn'] = [
+                    0 for n in range(1, results.dtype['flow']['Qn'].shape[0] + 1)
+                ]
+
+            else:
+                if (final_nsamples == 0):
+
+                    parts=np.fromiter([(pid,get_charge(pid),math.sqrt(mom[1]**2+mom[2]**2),math.sqrt(mom[0]**2-mom[3]**2),0.0,math.atan2(mom[2],mom[1]),0.5*math.log((mom[0]+mom[3])/(mom[0]-mom[3])),math.atanh(mom[3]/math.sqrt(mom[1]**2+mom[2]**2+mom[3]**2))) for pid,pos,mom in partsList ],
+                            dtype=[
+                                ('ID', int),
+                                ('charge', int),
+                                ('pT', float),
+                                ('ET', float),
+                                ('mT', float),
+                                ('phi', float),
+                                ('y', float),
+                                ('eta', float),
+                            ]
+                        )
+
+                    #logging.info('computing observables')
+                    charged = (parts['charge'] != 0)
+                    abs_eta = np.fabs(parts['eta'])
+
+                    results['dNch_deta'] += \
+                        np.count_nonzero(charged & (abs_eta < .5))
+
+                    ET_eta = .6
+                    results['dET_deta'] += \
+                        parts['ET'][abs_eta < ET_eta].sum() / (2*ET_eta)
+
+                    abs_ID = np.abs(parts['ID'])
+                    midrapidity = (np.fabs(parts['y']) < .5)
+
+                    pT = parts['pT']
+                    phi = parts['phi']
+
+                    for name, i in species:
+                        cut = (abs_ID == i) & midrapidity
+                        N = np.count_nonzero(cut)
+                        results['dN_dy'][name] += N 
+                        results['mean_pT'][name] += (0. if N == 0 else pT[cut].sum())
+
+                    pT_alice = pT[charged & (abs_eta < .8) & (.15 < pT) & (pT < 2.)]
+                    results['pT_fluct']['N'] += pT_alice.size
+                    results['pT_fluct']['sum_pT'] += pT_alice.sum()
+                    results['pT_fluct']['sum_pTsq'] += np.inner(pT_alice, pT_alice)
+
+                    phi_alice = phi[charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)]
+                    results['flow']['N'] += phi_alice.size
+                    results['flow']['Qn'] += [
+                        np.exp(1j*n*phi_alice).sum()
+                        for n in range(1, results.dtype['flow']['Qn'].shape[0] + 1)
+                    ]
+
+                else:
+
+                    #logging.info('computing observables')
+
+                    results['dNch_deta'] /= \
+                         nsamples
+
+                    results['dET_deta'] /= \
+                        nsamples
+
+                    for name, i in species:
+
+                        results['dN_dy'][name] /= nsamples
+                        results['mean_pT'][name] /= results['dN_dy'][name]
+
+        compute_observables(np.array([]),results,init=True)
+
+        nsamples=0
         # sample particles and write to file
         with open('particles_in.dat', 'w') as f:
-            for nsamples in range(1, maxsamples + 1):
+            #for nsamples in range(1, maxsamples + 1):
+            while (True):
                 parts = frzout.sample(surface, hrg)
                 if parts.size == 0:
                     continue
                 nparts += parts.size
-                if len(partsList) == 0:
-                    partsList=parts
-                else:
-                    partsList=np.append(partsList,parts)
-                print('#', parts.size, file=f)
-                for p in parts:
-                    print(p['ID'], *p['x'], *p['p'], file=f)
+                nsamples+=1
+                #print('#', parts.size, file=f)
+                #for p in parts:
+                #    print(p['ID'], *p['x'], *p['p'], file=f)
+                compute_observables(parts,results)
+
                 if nparts >= minparts and nsamples >= minsamples:
                     break
+
+        compute_observables(parts,results,final_nsamples=nsamples)
 
         logging.info('produced %d particles in %d samples', nparts, nsamples)
 
@@ -490,73 +585,17 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 #
 #            parts = np.fromiter(parts_iter, dtype=parts_dtype)
 
-        def get_charge(pid):
+#            # save raw particle data (optional)
+#            if particles_file is not None:
+#
+#                # save event to hdf5 data set
+#                logging.info('saving raw particle data')
+#
+#                particles_file.create_dataset(
+#                    'event_{}'.format(event_number),
+#                    data=parts, compression='lzf'
+#                )
 
-            charge=int(float(frzout.species_dict[abs(pid)]['charge']))
-
-            if (pid < 0):
-                charge*=-1
-
-            return charge
-
-        parts=np.fromiter([(pid,get_charge(pid),math.sqrt(mom[1]**2+mom[2]**2),math.sqrt(mom[0]**2-mom[3]**2),0.0,math.atan2(mom[2],mom[1]),0.5*math.log((mom[0]+mom[3])/(mom[0]-mom[3])),math.atanh(mom[3]/math.sqrt(mom[1]**2+mom[2]**2+mom[3]**2))) for pid,pos,mom in partsList ],
-                dtype=[
-                    ('ID', int),
-                    ('charge', int),
-                    ('pT', float),
-                    ('ET', float),
-                    ('mT', float),
-                    ('phi', float),
-                    ('y', float),
-                    ('eta', float),
-                ]
-                )
-
-        # save raw particle data (optional)
-        if particles_file is not None:
-
-            # save event to hdf5 data set
-            logging.info('saving raw particle data')
-
-            particles_file.create_dataset(
-                'event_{}'.format(event_number),
-                data=parts, compression='lzf'
-            )
-
-        logging.info('computing observables')
-        charged = (parts['charge'] != 0)
-        abs_eta = np.fabs(parts['eta'])
-
-        results['dNch_deta'] = \
-            np.count_nonzero(charged & (abs_eta < .5)) / nsamples
-
-        ET_eta = .6
-        results['dET_deta'] = \
-            parts['ET'][abs_eta < ET_eta].sum() / (2*ET_eta) / nsamples
-
-        abs_ID = np.abs(parts['ID'])
-        midrapidity = (np.fabs(parts['y']) < .5)
-
-        pT = parts['pT']
-        phi = parts['phi']
-
-        for name, i in species:
-            cut = (abs_ID == i) & midrapidity
-            N = np.count_nonzero(cut)
-            results['dN_dy'][name] = N / nsamples
-            results['mean_pT'][name] = (0. if N == 0 else pT[cut].mean())
-
-        pT_alice = pT[charged & (abs_eta < .8) & (.15 < pT) & (pT < 2.)]
-        results['pT_fluct']['N'] = pT_alice.size
-        results['pT_fluct']['sum_pT'] = pT_alice.sum()
-        results['pT_fluct']['sum_pTsq'] = np.inner(pT_alice, pT_alice)
-
-        phi_alice = phi[charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)]
-        results['flow']['N'] = phi_alice.size
-        results['flow']['Qn'] = [
-            np.exp(1j*n*phi_alice).sum()
-            for n in range(1, results.dtype['flow']['Qn'].shape[0] + 1)
-        ]
 
     nfail = 0
 
