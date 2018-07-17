@@ -196,6 +196,10 @@ parser.add_argument(
     '--Tswitch', type=float, default=.150, metavar='FLOAT',
     help='particlization temperature [GeV] (default: %(default).3f GeV)'
 )
+parser.add_argument(
+    '--dxy', type=float, metavar='FLOAT',
+    help='Grid cell size in the transverse plane [fm] (default: 0.15*"nucleon width")'
+)
 
 
 class StopEvent(Exception):
@@ -214,7 +218,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
     """
     # set the grid step size proportionally to the nucleon width
-    grid_step = .15*args.nucleon_width
+    grid_step = .15*args.nucleon_width if args.dxy is None else args.dxy
     # the "target" grid max: the grid shall be at least as large as the target
     grid_max_target = 15
     # next two lines set the number of grid cells and actual grid max,
@@ -304,7 +308,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         (dt = dt_ratio * dxy).  The SHASTA algorithm requires dt_ratio < 1/2.
 
         """
-        dxy = grid_step * (coarse or 1)
+        dxy = grid_step * (coarse or 1) 
         ls = math.ceil(event_size/dxy)  # the osu-hydro "ls" parameter
         n = 2*ls + 1  # actual number of grid cells
 
