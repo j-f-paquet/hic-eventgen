@@ -276,12 +276,17 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         initial_conditions = [checkpoint_ic]
 
     # create sampler HRG object (to be reused for all events)
-    hrg_kwargs = dict(species='urqmd', res_width=True)
+    #hrg_kwargs = dict(species='urqmd', res_width=True)
+    hrg_kwargs = dict(species='conformal_species', res_width=False)
     hrg = frzout.HRG(args.Tswitch, **hrg_kwargs)
 
     # append switching energy density to hydro arguments
     eswitch = hrg.energy_density()
     hydro_args = [args.hydro_args, 'edec={}'.format(eswitch)]
+
+    print('edens at T=110 MeV=',frzout.HRG(.110, **hrg_kwargs).energy_density()," vs 2*pi^2/30*T4=",2*3.1415**2/30.*.110**4/0.1973**3)
+    print('pressure at T=110 MeV=',frzout.HRG(.110, **hrg_kwargs).pressure()," vs 2*pi^2/90*T4=",2*3.1415**2/90.*.110**4/0.1973**3)
+    print('cs2 at T=110 MeV=',frzout.HRG(.110, **hrg_kwargs).cs2()," vs 0.3333")
 
     # arguments for "coarse" hydro pre-runs
     # no viscosity, run down to low temperature 110 MeV
@@ -362,21 +367,30 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         #   pitt  pitx  pity  pixx  pixy  piyy  pizz  Pi
 
         # pack surface data into a dict suitable for passing to frzout.Surface
+        #return dict(
+        #    zip(['x', 'sigma', 'v'], np.hsplit(surface, [3, 6, 8])),
+        #    pi=dict(zip(['xx', 'xy', 'yy'], surface.T[11:14])),
+        #    Pi=surface.T[15]
+        #)
+        # Disable bulk for now
         return dict(
             zip(['x', 'sigma', 'v'], np.hsplit(surface, [3, 6, 8])),
-            pi=dict(zip(['xx', 'xy', 'yy'], surface.T[11:14])),
-            Pi=surface.T[15]
+            pi=dict(zip(['xx', 'xy', 'yy'], surface.T[11:14]))
         )
 
     # species (name, ID) for identified particle observables
+    #species = [
+    #    ('pion', 211),
+    #    ('kaon', 321),
+    #    ('proton', 2212),
+    #    ('Lambda', 3122),
+    #    ('Sigma0', 3212),
+    #    ('Xi', 3312),
+    #    ('Omega', 3334),
+    #]
+    # For conformal case
     species = [
-        ('pion', 211),
-        ('kaon', 321),
-        ('proton', 2212),
-        ('Lambda', 3122),
-        ('Sigma0', 3212),
-        ('Xi', 3312),
-        ('Omega', 3334),
+        ('gamma', 22)
     ]
 
     # fully specify numeric data types, including endianness and size, to
