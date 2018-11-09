@@ -372,10 +372,9 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         #    pi=dict(zip(['xx', 'xy', 'yy'], surface.T[11:14])),
         #    Pi=surface.T[15]
         #)
-        # Disable bulk for now
+        # Disable bulk and shear corrections for now
         return dict(
-            zip(['x', 'sigma', 'v'], np.hsplit(surface, [3, 6, 8])),
-            pi=dict(zip(['xx', 'xy', 'yy'], surface.T[11:14]))
+            zip(['x', 'sigma', 'v'], np.hsplit(surface, [3, 6, 8]))
         )
 
     # species (name, ID) for identified particle observables
